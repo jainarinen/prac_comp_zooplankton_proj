@@ -1,0 +1,111 @@
+---
+title: "sp_wa_before"
+output: html_notebook
+---
+
+
+```{r}
+data <- read.delim2("sp_051121_wa.txt", header = TRUE, sep = "\t", dec = ".")
+
+head(data)
+#data
+```
+
+```{r}
+library('dplyr')
+df=data.frame(data$sample_stationid,data$object_date,data$acq_id,data$object_annotation_category,data$acq_sub_part, data$sample_tot_vol)
+
+df
+```
+
+```{r}
+library(dplyr)
+library(pivottabler)
+pt <- PivotTable$new()
+pt$addData(df)
+pt$addColumnDataGroups("data.object_annotation_category")
+pt$addRowDataGroups("data.acq_id")
+pt$defineCalculation(calculationName="TotalObject", summariseExpression="n()")
+pt$renderPivot()
+
+out <- pt$asDataFrame()
+out <- out %>% replace(is.na(.),0) 
+out2 <- out[-6,]
+out3 <- out2[,-23]
+out3
+```
+```{r}
+pt2 <- PivotTable$new()
+pt2$addData(df)
+pt2$addColumnDataGroups("data.acq_sub_part")
+pt2$addRowDataGroups("data.acq_id")
+pt2$defineCalculation(calculationName="sub_part", summariseExpression="mean(data.acq_sub_part)")
+pt2$renderPivot()
+
+#input unique values from pt2 and column #s
+
+la <- rep(16 ,22)
+lb<-rep(16, 22)
+sa <- rep(64, 22)
+sb<-rep(64,22)
+xa <- rep(1,22)
+
+
+merged <- data.frame(col1=la, col2= lb, col3= sa, col4=sb, col5=xa)
+
+merge_tran1 <- data.frame(t(merged[]))
+
+ 
+head(merge_tran1)
+```
+
+```{r}
+split_calc <- data.frame(mapply(`*`, out2, merge_tran1))
+rownames(split_calc) <- c("la" ,"lb", "sa","sb","xa")
+
+head(split_calc)
+rownames(split_calc)
+```
+
+```{r}
+avgl <- aggregate(split_calc, list(Group=replace(rownames(split_calc),rownames(split_calc) %in% c("la","lb"), "l")), mean)
+
+avg_dfl<- data.frame(avgl)
+avg_dfl
+
+avgsm <- aggregate(split_calc, list(Group=replace(rownames(split_calc),rownames(split_calc) %in% c("sa","sb"), "s")), mean)
+
+avg_dfsm<- data.frame(avgsm)
+avg_dfsm
+
+frac_final <- rbind(avg_dfl,avg_dfsm) %>% filter(!row_number() %in% c(2:6))
+frac_final
+```
+
+```{r}
+taxa_sum <- summarise_all(frac_final, ~if(is.numeric(.)) sum(.) else "Total")
+
+taxa_sum <- data_frame(taxa_sum)
+taxa_sum1 <- taxa_sum[,-1]  #removes unwanted column
+taxa_sum2 <-taxa_sum1[,-23]
+taxa_sum2
+
+```
+
+```{r}
+#print(data$sample_tot_vol)
+
+vol <-  c(rep (53.08787, 22)) #enter unique vals
+vol <- data.frame(vol)
+
+den_dfb <- t(t(taxa_sum2)/ vol) #matrix division
+
+den_dfb <- data.frame(den_dfb) #turns matrix results into df
+den_dfb<- setNames(den_dfb, names(taxa_sum2)) #carries taxa names over
+row.names(den_dfb)[1] <- "density"  #realistically renames row to "density"
+den_b <- den_dfb
+den_b
+saveRDS(den_b, file="wa_b.RDS")
+
+```
+

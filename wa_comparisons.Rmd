@@ -1,0 +1,105 @@
+---
+title: "WA comparison"
+output: html_notebook
+---
+
+
+
+```{r}
+library(tidyr)
+before <- readRDS("wa_b.RDS")
+before2 <- gather(before)
+before
+
+b_cop <- before$Copepoda + before$multiple.Copepoda
+b_det <- before$detritus + before$fiber.detritus
+
+
+during <-readRDS("wa_d.RDS")
+during2<- gather(during)
+during
+
+d_cop <- during$Copepoda 
+d_det <- during$detritus + during$fiber.detritus
+
+
+after <-readRDS("wa_a.RDS")
+after2<- gather(after)
+after
+
+a_cop <- after$Copepoda 
+a_det <- after$detritus + after$fiber.detritus
+
+#library("wrapr")
+#wa <- match_order()
+```
+
+```{r}
+wa <- inner_join(before, during, after, by= "Density")
+#wa <- full_join(x,y, by=NULL, copy=FALSE, suffix=c(".x",".y"))
+#print(rbind(before, during, after))
+#combine.mat(before,during,after, by= "column")
+```
+```{r}
+#install.packages("cowplot")
+library(cowplot)
+library(ggplot2)
+library(dplyr)
+library(forcats)
+library(hrbrthemes)
+library(viridis)
+library(scales)
+
+b<-ggplot(before2, aes(x=key, y=value, fill=key)) +
+  geom_bar(stat="identity")+ theme_minimal()+theme(axis.text.x = element_text(angle = 90, hjust = 0.5, vjust = 0.5)) + theme(legend.position = "none") + labs(x = "Zooplankton Taxa", y= "Density (m^3)") + ggtitle(" Before Dredging") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+d<-ggplot(during2, aes(x=key, y=value, fill=key)) +
+  geom_bar(stat="identity")+ theme_minimal()+theme(axis.text.x = element_text(angle = 90, hjust = 0.5, vjust = 0.5)) + theme(legend.position = "none") + labs(x = "Zooplankton Taxa", y= "Density (m^3)") + ggtitle(" During Dredging") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+a<-ggplot(after2, aes(x=key, y=value, fill=key)) +
+  geom_bar(stat="identity")+ theme_minimal()+theme(axis.text.x = element_text(angle = 90, hjust = 0.5, vjust = 0.5)) + theme(legend.position = "none") + labs(x = "Zooplankton Taxa", y= "Density (m^3)") + ggtitle(" After Dredging") +
+  theme(plot.title = element_text(hjust = 0.5))
+b
+d
+a
+#stitch all 3
+
+```
+
+
+```{r}
+
+#dredge<-  c (rep("before", 2), rep("after",2), rep("during",2))
+#id <- rep(c("copepoda","detritus"),3)
+#values <- 
+comp <- data.frame (dredge= c("before", "after", "during"),
+                    cop = c(b_cop, d_cop, a_cop),
+                    det = c(b_det, d_det,a_det)
+)
+comp
+```
+
+```{r}
+
+install.packages("MASS") 
+install.packages("reshape2") 
+install.packages("reshape") 
+
+library(MASS) 
+library(reshape2) 
+library(reshape) 
+
+comp.m<- melt(comp,id.vars='dredge')
+comp.m
+comp_cd <- ggplot(comp.m, aes(dredge,value)) + 
+    geom_bar(aes(fill = variable),position="dodge", stat="identity") + labs(x = "Dredge Period", y= "Density (m^3)") + ggtitle("Copepod and Detritus Volumes") +
+  theme(plot.title = element_text(hjust = 0.5))
+comp_cd
+```
+
+```{r}
+
+```
+

@@ -1,0 +1,147 @@
+---
+title: "sp_051221_we"
+author: "Naomi"
+date: "11/22/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+### Goal : creating a pipeline to readily read large data files from Ecotaxa and preform a density calculation for identified taxa. See word doc and excel doc in repo to understand density calculations.
+
+
+1. Upload document: We are uploading txt files from Ecotaxa. This includes a whole suite of features used to predict classification. For this analysis we are only concerned with the predictions and some metadata associated with these predictions.
+```{r}
+data <- read.delim2("sp051221we.txt", header = TRUE, sep = "\t", dec = ".")
+
+head(data)
+```
+2. Create a data frame with relevant information to analysis. The cateogries below are likely more than we need for the calculations, but provide informative metadata.
+
+```{r}
+library('dplyr')
+df=data.frame(data$sample_stationid,data$object_date,data$acq_id,data$object_annotation_category,data$acq_sub_part, data$sample_tot_vol)
+
+
+```
+
+3. Use pivottabbler package to summarize findings based on taxa counts per each scan. There are typically 5 scans, sometimes 6-7.
+```{r}
+library(dplyr)
+#install.packages("pivottabler")
+library(pivottabler)
+pt <- PivotTable$new()
+pt$addData(df)
+pt$addColumnDataGroups("data.object_annotation_category")
+pt$addRowDataGroups("data.acq_sub_part")
+pt$defineCalculation(calculationName="TotalObject", summariseExpression="n()")
+pt$renderPivot()
+
+out <- pt$asDataFrame()
+out
+out <- out %>% replace(is.na(.),0) 
+out2 <- out[-6,]
+out2
+
+
+
+```
+
+4. Multiply counts from splitting ratios by splitting ratios. Because we only scanned an aliquot or subsample from our sample, we must multiple our scan results by the recorded splitting ratio to get a more accurate estimate of taxa. 
+
+  A. this code will create pivot table with all the splitting     ratio values
+```{r}
+
+pt2 <- PivotTable$new()
+pt2$addData(df)
+pt2$addColumnDataGroups("data.acq_sub_part")
+pt2$addRowDataGroups("data.acq_id")
+pt2$defineCalculation(calculationName="sub_part", summariseExpression="mean(data.acq_sub_part)")
+pt2$renderPivot()
+
+```
+
+  B. This code will create a matrix of the splitting ratio value     for matrix multiplication
+```{r}
+
+la <- rep(32 ,19)
+
+
+lb<-rep(32, 19)
+#dflb<-data.frame(lb)
+
+sa <- rep(200, 19)
+#dfsa<-data.frame(sa)
+
+sb<-rep(200,19)
+#dfsb<-data.frame(sb)
+
+xa <- rep(1,19)
+#dfxa<-data.frame(xa)
+
+merged <- data.frame(col1=la, col2= lb, col3= sa, col4=sb, col5=xa)
+
+merge_tran1 <- data.frame(t(merged[]))
+
+ 
+head(merge_tran1)
+
+
+```
+  c. Now we will multiply data frames to get (splitting ratio x        abundances within each scan and for every column)
+```{r}
+split_calc <- data.frame(mapply(`*`, out2, merge_tran1))
+rownames(split_calc) <- c("la" ,"lb", "sa","sb","xa")
+
+head(split_calc)
+rownames(split_calc)
+```
+5. Now we will summarize all three fractions (s,l,x) by averaging counts from each scan within a fraction. This will likely only have to be done with the s and l fraction.
+```{r}
+avgl <- aggregate(split_calc, list(Group=replace(rownames(split_calc),rownames(split_calc) %in% c("la","lb"), "l")), mean)
+
+avg_dfl<- data.frame(avgl)
+avg_dfl
+
+avgsm <- aggregate(split_calc, list(Group=replace(rownames(split_calc),rownames(split_calc) %in% c("sa","sb"), "s")), mean)
+
+avg_dfsm<- data.frame(avgsm)
+avg_dfsm
+
+frac_final <- rbind(avg_dfl,avg_dfsm) %>% filter(!row_number() %in% c(2:6))
+frac_final
+                         
+```
+6. Now that our  scans are summarized by fraction size, we will total each taxa column from all three scans
+
+```{r}
+taxa_sum <- summarise_all(frac_final, ~if(is.numeric(.)) sum(.) else "Total")
+
+taxa_sum <- data_frame(taxa_sum)
+taxa_sum1 <- taxa_sum[,-1]  #removes unwanted column
+taxa_sum1
+taxa_sum2 <- taxa_sum1[,-19] #removes unwanted "Total" column
+taxa_sum2                       
+
+```
+7. Now we will calculate our zooplankton density using these totals and a measured variable known as "water volume filtered".
+```{r}
+
+#use code below to find volume value, I hashed it out so it wouldn't continue to print
+
+#print(data$sample_tot_vol)
+
+vol <-  c(rep (86.6970, 18)) #creates a matrix of vol values
+vol <- data.frame(vol)
+
+den_df <- t(t(taxa_sum2)/ vol) #matrix division
+
+den_df <- data.frame(den_df) #turns matrix results into df
+den_df<- setNames(den_df, names(taxa_sum2)) #carries taxa names over
+row.names(den_df)[1] <- "density"  #realistically renames row to "density"
+den_df
+
+
+```
+

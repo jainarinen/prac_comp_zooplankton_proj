@@ -1,0 +1,119 @@
+---
+title: "sp_wa_during"
+output: html_notebook
+---
+
+
+
+```{r}
+data2 <- read.delim2("sp061421wa.txt", header = TRUE, sep = "\t", dec = ".")
+
+head(data2)
+
+```
+
+```{r}
+library('dplyr')
+df2=data.frame(data2$sample_stationid,data2$object_date,data2$acq_id,data2$object_annotation_category,data2$acq_sub_part, data2$sample_tot_vol)
+
+df2
+```
+
+```{r}
+library(dplyr)
+library(pivottabler)
+pt_d <- PivotTable$new()
+pt_d$addData(df2)
+pt_d$addColumnDataGroups("data2.object_annotation_category")
+pt_d$addRowDataGroups("data2.acq_id")
+pt_d$defineCalculation(calculationName="TotalObject", summariseExpression="n()")
+pt_d$renderPivot()
+
+out_d <- pt_d$asDataFrame()
+out_d
+out_d <- out_d %>% replace(is.na(.),0) 
+out2d <- out_d[-6,] #remove total columns
+out3d <- out2d[,-18] #remove total column
+row.names(out3d)[3] <- "sb" #unique to this datasheet due to user error
+out3d
+```
+
+```{r}
+pt2d <- PivotTable$new()
+pt2d$addData(df2)
+pt2d$addColumnDataGroups("data2.acq_sub_part")
+pt2d$addRowDataGroups("data2.acq_id")
+pt2d$defineCalculation(calculationName="sub_part", summariseExpression="mean(data2.acq_sub_part)")
+pt2d$renderPivot()
+
+#input unique values from pt2 and column #s
+
+la <- rep(16 ,17) 
+lb<-rep(16, 17)   #16 not 4 due to user error
+sa <- rep(160, 17)
+sb<-rep(160,17)
+xa <- rep(1,17)
+
+
+mergedd <- data.frame(col1=la, col2= lb, col3= sa, col4=sb, col5=xa)
+
+merge_tran1d <- data.frame(t(mergedd[]))
+
+ 
+head(merge_tran1d)
+```
+
+```{r}
+split_calcd <- data.frame(mapply(`*`, out3d, merge_tran1d))
+rownames(split_calcd) <- c("la" ,"lb", "sa","sb","xa")
+
+head(split_calcd)
+rownames(split_calcd)
+```
+
+
+```{r}
+avgld <- aggregate(split_calcd, list(Group=replace(rownames(split_calcd),rownames(split_calcd) %in% c("la","lb"), "l")), mean)
+
+avg_dfld<- data.frame(avgld)
+avg_dfld
+
+avgsmd <- aggregate(split_calcd, list(Group=replace(rownames(split_calcd),rownames(split_calcd) %in% c("sa","sb"), "s")), mean)
+
+avg_dfsmd<- data.frame(avgsmd)
+avg_dfsmd
+
+frac_finald <- rbind(avg_dfld,avg_dfsmd) %>% filter(!row_number() %in% c(2:6))
+frac_finald
+```
+
+```{r}
+taxa_sumd <- summarise_all(frac_finald, ~if(is.numeric(.)) sum(.) else "Total")
+
+taxa_sumd <- data_frame(taxa_sumd)
+taxa_sum1d <- taxa_sumd[,-1]  #removes unwanted col
+taxa_sum1d
+
+```
+
+```{r}
+#print(data2$sample_tot_vol)
+
+vol_d <-  c(rep (60.13029, 17)) #enter unique vals
+vol_d <- data.frame(vol_d)
+vol_d
+
+den_dfd <- t(t(taxa_sum1d)/ vol_d) #matrix division
+
+den_dfd <- data.frame(den_dfd) #turns matrix results into df
+den_dfd<- setNames(den_dfd, names(taxa_sum1d)) #carries taxa names over
+row.names(den_dfd)[1] <- "density"  #realistically renames row to "density"
+den_dfd
+
+den_d <- den_dfd
+
+saveRDS(den_d, file="wa_d.RDS")
+```
+
+
+
